@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#120e0b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Lights Out Wheel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500&family=Figtree:wght@400;600&display=swap">
+<style>
+/* Layout: one dim bedside screen — a single tall time wheel, centred, with one button under it */
+:root{
+  --bg:#120e0b; --panel:#1c1611; --fg:#f1e3cf; --muted:#8b7864; --faint:#3a2f25;
+  --amber:#f0a75a; --amber-dim:#7a5330;
+  --display:"Fraunces", Georgia, "Times New Roman", serif;
+  --body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;overflow:hidden;
+  -webkit-user-select:none;user-select:none}
+.now{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.now b{color:var(--fg);font-weight:600;letter-spacing:.06em}
+.wheel-wrap{position:relative;width:min(320px,100%);height:300px}
+.wheel{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;will-change:scroll-position;
+  -webkit-mask-image:linear-gradient(transparent,#000 35%,#000 65%,transparent);
+  mask-image:linear-gradient(transparent,#000 35%,#000 65%,transparent);outline:none}
+.wheel::-webkit-scrollbar{display:none}
+.pad{height:120px}
+.item{height:60px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;
+  font-family:var(--display);font-weight:300;font-size:34px;color:var(--muted);
+  font-variant-numeric:tabular-nums;transition:color .25s ease-out,transform .25s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.item small{font-family:var(--body);font-size:14px;margin-left:8px;letter-spacing:.08em}
+.item.on{color:var(--amber);transform:scale(1.28)}
+.band{position:absolute;left:0;right:0;top:120px;height:60px;border-top:1px solid var(--faint);border-bottom:1px solid var(--faint);pointer-events:none}
+.wheel.locked{pointer-events:none;opacity:.55}
+.until{min-height:22px;font-size:16px;color:var(--fg);font-variant-numeric:tabular-nums}
+.until span{color:var(--muted)}
+button{font-family:var(--body);font-size:17px;font-weight:600;letter-spacing:.04em;border:0;border-radius:999px;
+  padding:16px 44px;background:var(--amber);color:#1a1209;cursor:pointer;min-width:200px}
+button.cancel{background:transparent;color:var(--amber);box-shadow:inset 0 0 0 1.5px var(--amber-dim)}
+button:focus-visible{outline:2px solid var(--fg);outline-offset:3px}
+button:disabled{opacity:.35}
+.hint{font-size:12.5px;color:var(--muted);max-width:30ch;text-align:center;line-height:1.5}
+.flash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:20;
+  background:radial-gradient(circle at 50% 45%,var(--amber) 0%,var(--amber-dim) 60%,var(--bg) 100%)}
+.flash.go{animation:glow 1.8s ease-in-out}
+@keyframes glow{0%{opacity:0}35%{opacity:.45}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.item{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="now">Now <b id="now">--:--</b></div>
+<div class="wheel-wrap">
+  <div class="wheel" id="wheel" tabindex="0" aria-label="Lights out time"></div>
+  <div class="band"></div>
+</div>
+<div class="until" id="until"></div>
+<button id="go">Set</button>
+<div class="flash" id="flash"></div>
+<div class="hint" id="hint">Leave this page open with the screen on. It beeps once, then stays quiet.</div>
+
+<script>
+const wheel=document.getElementById('wheel'),nowEl=document.getElementById('now'),
+  untilEl=document.getElementById('until'),btn=document.getElementById('go'),hint=document.getElementById('hint');
+const H=60,COUNT=12*60+1;let base,items=[],sel=0,target=null,timer=null,ctx=null,lock=null;
+const fmt=d=>{let h=d.getHours(),m=d.getMinutes();const ap=h<12?'am':'pm';h=h%12||12;return [h+':'+String(m).padStart(2,'0'),ap]};
+const dur=min=>{const h=Math.floor(min/60),m=min%60;return (h?h+' hr ':'')+(m||!h?m+' min':'')};
+
+function build(){
+  base=new Date();base.setSeconds(0,0);
+  wheel.innerHTML='<div class="pad"></div>';items=[];
+  for(let i=0;i<COUNT;i++){const d=new Date(base.getTime()+i*60000),[t,ap]=fmt(d);
+    const el=document.createElement('div');el.className='item';el.innerHTML=t+'<small>'+ap+'</small>';
+    el.onclick=()=>wheel.scrollTo({top:i*H,behavior:'smooth'});wheel.appendChild(el);items.push(el)}
+  wheel.insertAdjacentHTML('beforeend','<div class="pad"></div>');
+  wheel.scrollTop=0;mark(0);
+}
+function mark(i){i=Math.max(0,Math.min(COUNT-1,i));if(items[sel])items[sel].classList.remove('on');sel=i;items[i].classList.add('on');
+  if(!target){btn.disabled=i===0;untilEl.innerHTML=i===0?'<span>Scroll to pick a time</span>':'in '+dur(i)}}
+let raf=0;wheel.addEventListener('scroll',()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;mark(Math.round(wheel.scrollTop/H))})},{passive:true});
+wheel.addEventListener('keydown',e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();
+  wheel.scrollTo({top:(sel+(e.key==='ArrowDown'?1:-1))*H})}});
+
+function beep(){
+  const t=ctx.currentTime,o=ctx.createOscillator(),g=ctx.createGain();
+  o.type='sine';o.frequency.value=880;g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(.35,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.9);
+  o.connect(g).connect(ctx.destination);o.start(t);o.stop(t+.95);
+}
+function tick(){
+  const n=new Date();nowEl.textContent=fmt(n).join(' ');
+  if(target){const left=target-n;
+    if(left<=0){beep();const f=document.getElementById('flash');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');stop('Lights out.');return}
+    const m=Math.ceil(left/60000);untilEl.textContent=m>1?'Beeps in '+dur(m):'Beeps in '+Math.ceil(left/1000)+' s'}
+  else if(n-base>=60000&&!wheel.matches(':active')){const keep=sel-Math.floor((n-base)/60000);build();
+    const i=Math.max(0,keep);wheel.scrollTop=i*H;mark(i)}
+}
+async function start(){
+  try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();await ctx.resume();
+    const s=ctx.createBuffer(1,1,22050),b=ctx.createBufferSource();b.buffer=s;b.connect(ctx.destination);b.start()}catch(e){}
+  target=new Date(base.getTime()+sel*60000);
+  try{lock=await navigator.wakeLock?.request('screen')}catch(e){}
+  wheel.classList.add('locked');btn.textContent='Cancel';btn.classList.add('cancel');
+  hint.textContent='Set for '+fmt(target).join(' ')+'. Keep this page open.';tick();
+}
+function stop(msg){
+  target=null;try{lock?.release()}catch(e){}lock=null;
+  wheel.classList.remove('locked');btn.textContent='Set';btn.classList.remove('cancel');
+  hint.textContent='Leave this page open with the screen on. It beeps once, then stays quiet.';
+  build();if(msg)untilEl.textContent=msg;
+}
+btn.onclick=()=>target?stop():start();
+document.addEventListener('visibilitychange',async()=>{if(target&&document.visibilityState==='visible'){try{lock=await navigator.wakeLock?.request('screen')}catch(e){}}});
+build();tick();setInterval(tick,500);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
