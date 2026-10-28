@@ -48,6 +48,10 @@ button{font-family:var(--body);font-size:17px;font-weight:600;letter-spacing:.04
 button.cancel{background:transparent;color:var(--amber);box-shadow:inset 0 0 0 1.5px var(--amber-dim)}
 button:focus-visible{outline:2px solid var(--fg);outline-offset:3px}
 button:disabled{opacity:.35}
+[hidden]{display:none!important}
+.quick{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.quick button{min-width:0;padding:10px 18px;font-size:15px;background:transparent;color:var(--fg);box-shadow:inset 0 0 0 1.5px var(--faint)}
+.quick button:active{background:var(--panel)}
 .hint{font-size:12.5px;color:var(--muted);max-width:30ch;text-align:center;line-height:1.5}
 .flash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:20;
   background:radial-gradient(circle at 50% 45%,var(--amber) 0%,var(--amber-dim) 60%,var(--bg) 100%)}
@@ -64,6 +68,11 @@ button:disabled{opacity:.35}
   <div class="band"></div>
 </div>
 <div class="until" id="until"></div>
+<div class="quick" id="quick">
+  <button data-min="15">15 mins</button>
+  <button data-min="30">30 mins</button>
+  <button data-min="60">1 hour</button>
+</div>
 <button id="go">Set</button>
 <div class="flash" id="flash"></div>
 <div class="hint" id="hint">Leave this page open with the screen on. It beeps once, then stays quiet.</div>
@@ -109,16 +118,18 @@ async function start(){
     const s=ctx.createBuffer(1,1,22050),b=ctx.createBufferSource();b.buffer=s;b.connect(ctx.destination);b.start()}catch(e){}
   target=new Date(base.getTime()+sel*60000);
   try{lock=await navigator.wakeLock?.request('screen')}catch(e){}
-  wheel.classList.add('locked');btn.textContent='Cancel';btn.classList.add('cancel');
+  wheel.classList.add('locked');quick.hidden=true;btn.textContent='Cancel';btn.classList.add('cancel');
   hint.textContent='Set for '+fmt(target).join(' ')+'. Keep this page open.';tick();
 }
 function stop(msg){
   target=null;try{lock?.release()}catch(e){}lock=null;
-  wheel.classList.remove('locked');btn.textContent='Set';btn.classList.remove('cancel');
+  wheel.classList.remove('locked');quick.hidden=false;btn.textContent='Set';btn.classList.remove('cancel');
   hint.textContent='Leave this page open with the screen on. It beeps once, then stays quiet.';
   build();if(msg)untilEl.textContent=msg;
 }
 btn.onclick=()=>target?stop():start();
+const quick=document.getElementById('quick');
+quick.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(target)stop();const n=+b.dataset.min;wheel.scrollTop=n*H;mark(n);start()});
 document.addEventListener('visibilitychange',async()=>{if(target&&document.visibilityState==='visible'){try{lock=await navigator.wakeLock?.request('screen')}catch(e){}}});
 build();tick();setInterval(tick,500);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
